@@ -8,6 +8,10 @@ on:
         required: true
         default: 'latest'
 
+# 核心修正 1：赋予 Actions 写入 Release 的权限
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build on ${{ matrix.os }}
@@ -33,19 +37,21 @@ jobs:
           node-version: 20
 
       - name: Build Package
+        # 核心修正 2：Windows 下使用 bash 环境统一清理命令
         shell: bash
         run: |
           mkdir build_dir && cd build_dir
           npm init -y
           npm install n8n@${{ github.event.inputs.n8n_version }} --production
           
-          # 清理瘦身
-          find node_modules -type f -name "*.md" -delete || true
+          # 统一瘦身逻辑
+          find node_modules -type f \( -name "*.md" -o -name "*.map" -o -name "README" \) -delete || true
+          find node_modules -type d \( -name "test" -o -name "tests" -o -name "example" \) -exec rm -rf {} + || true
           
-          # 根据不同平台执行压缩
+          # 根据不同平台使用对应的压缩命令
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            # Windows 环境下也可以使用 7z 或直接用 shell 逻辑
-            zip -r ../${{ matrix.artifact_name }} node_modules package.json
+            # Windows Actions 环境自带 7z，比 zip 指令更稳
+            7z a ../${{ matrix.artifact_name }} node_modules package.json
           else
             zip -r ../${{ matrix.artifact_name }} node_modules package.json
           fi
@@ -62,15 +68,19 @@ jobs:
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2  # 使用更稳定的 v2 版本
         with:
-          tag_name: ${{ github.event.inputs.n8n_version }}-${{ github.run_number }}
+          # 核心修正 3：使用 run_id 确保 tag 唯一性，防止发布失败
+          tag_name: n8n-${{ github.event.inputs.n8n_version }}-${{ github.run_id }}
           name: Release n8n ${{ github.event.inputs.n8n_version }}
+          body: "Auto-generated n8n core packages for desktop."
+          draft: false
+          prerelease: false
           files: |
-            n8n-core-windows.zip/n8n-core-windows.zip
-            n8n-core-macos.zip/n8n-core-macos.zip
-            n8n-core-linux.zip/n8n-core-linux.zip
+            ./artifacts/n8n-core-windows.zip/n8n-core-windows.zip
+            ./artifacts/n8n-core-macos.zip/n8n-core-macos.zip
+            ./artifacts/n8n-core-linux.zip/n8n-core-linux.zip
