@@ -41,6 +41,10 @@ jobs:
           mkdir build_dir && cd build_dir
           npm init -y
           npm install n8n@${{ github.event.inputs.n8n_version }} --production
+
+          # 统一瘦身逻辑
+          find node_modules -type f \( -name "*.md" -o -name "*.map" -o -name "README" \) -delete || true
+          find node_modules -type d \( -name "test" -o -name "tests" -o -name "example" \) -exec rm -rf {} + || true
           
           # 根据不同平台使用对应的压缩命令
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
