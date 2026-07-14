@@ -40,12 +40,21 @@ jobs:
         run: |
           mkdir build_dir && cd build_dir
           npm init -y
+          
+          # 针对 macOS 强行开启 Apple Silicon (arm64) 交叉编译，确保原生模块不暴雷
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            export npm_config_arch=arm64
+            export TARGET_ARCH=arm64
+            echo "正在为 Apple Silicon (arm64) 交叉编译原生模块..."
+          fi
+
+          # 强制安装
           npm install n8n@${{ github.event.inputs.n8n_version }} --production
 
-          # 统一瘦身逻辑
-          find node_modules -type f \( -name "*.md" -o -name "*.map" -o -name "README" \) -delete || true
-          find node_modules -type d \( -name "test" -o -name "tests" -o -name "example" \) -exec rm -rf {} + || true
+          # 1. 仅物理删除大块的 Markdown、Map 映射、Changelog 文件（这部分通常能缩减 10%-20% 的体积，且绝对安全）
+          find node_modules -type f \( -name "*.md" -o -name "*.map" -o -name "CHANGELOG" -o -name "LICENSE" \) -delete || true
           
+
           # 根据不同平台使用对应的压缩命令
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             7z a ../${{ matrix.artifact_name }} node_modules package.json
